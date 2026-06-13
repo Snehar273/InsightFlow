@@ -479,7 +479,15 @@ if current_page == 0:
     ]
     
     with col1:
-        status = "✅" if st.session_state.df_raw else "○"
+        status = (
+    "✅"
+    if (
+        "df_raw" in st.session_state
+        and st.session_state.df_raw is not None
+        and not st.session_state.df_raw.empty
+    )
+    else "○"
+)
         st.markdown(f"<div style='text-align: center; padding: 12px; background: white; border-radius: 8px; border: 1px solid #E2E8F0;'><p style='margin: 0; font-size: 1.5em;'>{steps[0][1]}</p><p style='margin: 4px 0 0 0; font-size: 0.85em; color: #64748B;'>{steps[0][0]}</p><p style='margin: 4px 0 0 0; font-size: 1.2em;'>{status}</p></div>", unsafe_allow_html=True)
     
     with col2:

@@ -3,104 +3,237 @@ import json
 import logging
 import os
 import time
-from config import CATEGORIES, SENTIMENTS, AI_PROMPT
+import re
+
 from dotenv import load_dotenv
+from config import CATEGORIES, SENTIMENTS
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+
 class AIProcessor:
+
     def __init__(self):
-        """Initialize Gemini AI client"""
+        """Initialize Gemini AI"""
+
         try:
             import google.generativeai as genai
+
             self.genai = genai
+
             api_key = os.getenv("GEMINI_API_KEY")
+
             if not api_key:
-                raise ValueError("GEMINI_API_KEY not found in .env file")
+                raise ValueError("GEMINI_API_KEY not found")
+
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-pro')
-            logger.info("✅ Gemini API initialized")
-        except ImportError:
-            logger.error("Google Generative AI not installed. Run: pip install google-generativeai")
-            raise
+
+            # Latest stable model
+            self.model = genai.GenerativeModel("gemini-2.0-flash")
+
+            logger.info("Gemini initialized successfully")
+
         except Exception as e:
-            logger.error(f"Gemini initialization error: {e}")
+            logger.error(f"AI Initialization Error : {e}")
             raise
-    
+
     def enrich_feedback(self, feedback_text):
-        """Call AI to get sentiment, category, and summary"""
+        """
+        Analyze one feedback message
+        """
+
+        if pd.isna(feedback_text) or str(feedback_text).strip() == "":
+            return {
+                "sentiment": "Neutral",
+                "category": "Other",
+                "summary": "Empty feedback"
+            }
+
+        prompt = f"""
+You are an AI Customer Feedback Analyst.
+
+Analyze the customer feedback.
+
+Customer Feedback:
+
+{feedback_text}
+
+Choose ONLY these sentiments:
+
+Positive
+Negative
+Neutral
+
+Choose ONLY these categories:
+
+Billing
+App Bug
+Delivery
+Staff/Support
+Other
+
+Generate a one-line summary under 15 words.
+
+Return ONLY valid JSON.
+
+Example:
+
+{{
+    "sentiment":"Negative",
+    "category":"Billing",
+    "summary":"Customer reports delayed refund."
+}}
+"""
+
         try:
-            prompt = f"""Analyze this customer feedback and return ONLY a valid JSON object (no markdown, no explanation):
 
-Feedback: "{feedback_text}"
-
-Return exactly this format:
-{{"sentiment": "Positive" or "Negative" or "Neutral", "category": "Billing" or "App Bug" or "Delivery" or "Staff/Support" or "Other", "summary": "one line description (max 12 words)"}}"""
-            
             response = self.model.generate_content(prompt)
+
             response_text = response.text.strip()
-            
-            # Remove markdown code blocks if present
-            if response_text.startswith("```"):
-                response_text = response_text.split("```")[1]
-                if response_text.startswith("json"):
-                    response_text = response_text[4:]
-                response_text = response_text.split("```")[0]
-            
-            response_text = response_text.strip()
-            
-            # Parse JSON
-            result = json.loads(response_text)
-            
-            # Validate and fix
-            result['sentiment'] = result.get('sentiment', 'Neutral')
-            if result['sentiment'] not in SENTIMENTS:
-                result['sentiment'] = 'Neutral'
-            
-            result['category'] = result.get('category', 'Other')
-            if result['category'] not in CATEGORIES:
-                result['category'] = 'Other'
-            
-            result['summary'] = str(result.get('summary', 'No summary'))[:80]
-            
-            return result
-        
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON parsing error: {e}")
+
+            match = re.search(r"\{.*\}", response_text, re.DOTALL)
+
+            if not match:
+                raise Exception("No JSON returned")
+
+            json_text = match.group()
+
+            result = json.loads(json_text)
+
+            sentiment = result.get("sentiment", "Neutral")
+
+            if sentiment not in SENTIMENTS:
+                sentiment = "Neutral"
+
+            category = result.get("category", "Other")
+
+            if category not in CATEGORIES:
+                category = "Other"
+
+            summary = str(result.get("summary", "")).strip()
+
+            if summary == "":
+                summary = "No summary generated"
+
             return {
-                'sentiment': 'Neutral',
-                'category': 'Other',
-                'summary': 'Unable to parse'
+                "sentiment": sentiment,
+                "category": category,
+                "summary": summary
             }
+
         except Exception as e:
-            logger.error(f"AI processing error: {e}")
+
+            logger.error(f"AI Processing Error : {e}")
+
+            # Rule-based fallback
+
+            text = str(feedback_text).lower()
+
+            category = "Other"
+            sentiment = "Neutral"
+
+            if any(word in text for word in [
+                "refund",
+                "payment",
+                "bill",
+                "charged",
+                "coupon",
+                "price",
+                "fee"
+            ]):
+                category = "Billing"
+
+            elif any(word in text for word in [
+                "crash",
+                "bug",
+                "login",
+                "address",
+                "checkout",
+                "app",
+                "save"
+            ]):
+                category = "App Bug"
+
+            elif any(word in text for word in [
+                "delivery",
+                "driver",
+                "late",
+                "order",
+                "cancelled"
+            ]):
+                category = "Delivery"
+
+            elif any(word in text for word in [
+                "support",
+                "staff",
+                "agent",
+                "executive"
+            ]):
+                category = "Staff/Support"
+
+            if any(word in text for word in [
+                "bad",
+                "terrible",
+                "late",
+                "refund",
+                "failed",
+                "issue",
+                "problem",
+                "ridiculous",
+                "crash",
+                "cancelled"
+            ]):
+                sentiment = "Negative"
+
+            elif any(word in text for word in [
+                "great",
+                "good",
+                "awesome",
+                "excellent",
+                "fantastic",
+                "love",
+                "wonderful",
+                "thank"
+            ]):
+                sentiment = "Positive"
+
             return {
-                'sentiment': 'Neutral',
-                'category': 'Other',
-                'summary': 'Error processing'
+                "sentiment": sentiment,
+                "category": category,
+                "summary": "Generated using fallback logic"
             }
-    
+
     def process_batch(self, df, progress_callback=None):
-        """Process all feedbacks in dataframe with rate limiting"""
+        """
+        Process entire dataframe
+        """
+
         results = []
-        
-        for idx, row in df.iterrows():
-            feedback = row['feedback_text']
-            
-            enriched = self.enrich_feedback(feedback)
-            results.append(enriched)
-            
+
+        total = len(df)
+
+        for index, row in df.iterrows():
+
+            feedback = row["feedback_text"]
+
+            result = self.enrich_feedback(feedback)
+
+            results.append(result)
+
             if progress_callback:
-                progress_callback(idx + 1, len(df))
-            
-            # Rate limiting for Gemini
-            time.sleep(0.1)
-        
-        # Add to dataframe
-        df['sentiment'] = [r['sentiment'] for r in results]
-        df['category'] = [r['category'] for r in results]
-        df['summary'] = [r['summary'] for r in results]
-        
+                progress_callback(index + 1, total)
+
+            # Prevent API rate limit
+            time.sleep(1)
+
+        df = df.copy()
+
+        df["sentiment"] = [x["sentiment"] for x in results]
+        df["category"] = [x["category"] for x in results]
+        df["summary"] = [x["summary"] for x in results]
+
+        logger.info("AI enrichment completed")
+
         return df

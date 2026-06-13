@@ -3,7 +3,24 @@
 CATEGORIES = ["Billing", "App Bug", "Delivery", "Staff/Support", "Other"]
 SENTIMENTS = ["Positive", "Negative", "Neutral"]
 
-AI_PROMPT = """Analyze customer feedback and return ONLY JSON."""
+AI_PROMPT = """
+You are an AI Customer Feedback Analyst.
+
+Return ONLY JSON.
+
+Sentiment:
+Positive, Negative, Neutral
+
+Category:
+Billing
+App Bug
+Delivery
+Staff/Support
+Other
+
+Summary:
+Maximum 15 words.
+"""
 
 # Meaningless text patterns
 MEANINGLESS_PATTERNS = [

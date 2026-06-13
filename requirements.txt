@@ -1,9 +1,9 @@
 streamlit
 pandas
 numpy
-openpyxl
 plotly
+openpyxl
 python-dotenv
+google-generativeai
 fuzzywuzzy
 python-Levenshtein
-google-generativeai
