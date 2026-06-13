@@ -557,7 +557,7 @@ elif current_page == 1:
             
             st.divider()
             st.markdown("### 👀 Data Preview")
-            st.dataframe(st.session_state.df_raw.head(10), use_container_width=True)
+            st.dataframe(st.session_state.df_raw.head(10), width='stretch')
         
         except Exception as e:
             st.error(f"Error loading file: {str(e)}")
@@ -712,7 +712,7 @@ elif current_page == 3:
             with st.expander("👀 Preview Enriched Data"):
                 st.dataframe(
                     st.session_state.df_enriched[['feedback_text', 'sentiment', 'category', 'summary']].head(15),
-                    use_container_width=True
+                    width='stretch'
                 )
 
 # ==================== PAGE 4: INSIGHTS ====================
