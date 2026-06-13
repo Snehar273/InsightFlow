@@ -26,7 +26,7 @@ class AIProcessor:
                 raise ValueError("GEMINI_API_KEY not found in .env")
             
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel("gemini-1.5-mini")  # Cheaper model
+            self.model = genai.GenerativeModel("gemini-2.5-flash")  
             logger.info("✅ Gemini API initialized")
             self.use_ai = True
             
